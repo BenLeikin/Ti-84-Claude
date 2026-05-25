@@ -1,93 +1,189 @@
-# TI-84 Claude
+# TI-84 Claude Bridge
 
+A hardware bridge that lets a Texas Instruments TI-84 Plus graphing calculator
+talk to Anthropic's Claude API over WiFi, using a Seeed XIAO ESP32-S3 hidden
+inside the calculator case.
 
+The calculator becomes a front-end for an LLM: type a prompt on the keypad,
+press Enter, see Claude's response on the screen. No external hardware visible,
+no USB cables, just a calculator that has unexpectedly become much smarter.
 
-## Getting started
+## Status
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+Work in progress.
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+| Component | Status |
+|-----------|--------|
+| ESP32 firmware: WiFi, captive portal, API client | Working |
+| Multi-network and multi-profile support | Working |
+| Web configuration UI | Working |
+| Power: LiPo + USB-C charging | Designed, parts ordered |
+| Internal mounting inside TI-84 case | Designed |
+| Link port protocol (ESP32 side) | Next up |
+| Calculator-side program | Pending |
 
-## Add your files
+## Hardware
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+| Item | Notes |
+|------|-------|
+| Seeed XIAO ESP32-S3 | The bridge. 21x17.5mm, dual-core 240MHz, WiFi, USB-C, integrated LiPo charging |
+| LiPo cell, 250mAh | Powers the ESP32 independently of the calculator's batteries |
+| IPEX 2.4GHz antenna | External antenna for reliable WiFi inside the metal-LCD-and-PCB sandwich |
+| TI-84 Plus (original, not CE) | Z80 at 15MHz, 96x64 mono display, runs on 4x AAA |
+| 2.5mm I/O port | The calculator's link port, where the ESP32 connects internally |
+
+A complete bill of materials with quantities, voltage ratings, and sourcing
+notes will be added in `docs/parts-list.pdf`.
+
+## Architecture
 
 ```
-cd existing_repo
-git remote add origin http://gitlab.pilg0re.net/Ben/ti-84-claude.git
-git branch -M main
-git push -uf origin main
+┌─────────────────┐     I/O port      ┌──────────────────┐      HTTPS       ┌──────────────────────┐
+│  TI-84 Plus     │◄─────────────────►│  XIAO ESP32-S3   │◄────────────────►│  api.anthropic.com   │
+│  - BASIC/asm    │   bit-banged      │  - WiFi          │   over user's    │  Claude Messages API │
+│  - 96x64 mono   │   serial          │  - HTTPS client  │   home network   │                      │
+│  - User input   │                   │  - JSON parser   │                  │                      │
+└─────────────────┘                   └──────────────────┘                  └──────────────────────┘
 ```
 
-## Integrate with your tools
+The ESP32 does the heavy lifting: network, TLS, JSON, configuration storage.
+The calculator runs a small program that just sends prompts and renders
+responses.
 
-* [Set up project integrations](http://gitlab.pilg0re.net/Ben/ti-84-claude/-/settings/integrations)
+## Features
 
-## Collaborate with your team
+**End-user friendly configuration**
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+- No source-code editing or compilation required to use the device
+- Captive portal setup: connect a phone to the device's WiFi, fill out a web
+  form, done
+- Once configured, runtime web UI accessible at `http://ti84claude.local`
 
-## Test and Deploy
+**Multiple WiFi networks**
 
-Use the built-in continuous integration in GitLab.
+- Save up to 5 networks (home, work, phone hotspot, etc.)
+- Auto-scans at boot and connects to the highest-priority reachable network
+- Reorder priority from the web UI
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+**Multiple Claude profiles**
 
-***
+- Save up to 5 profiles, each with its own API key, model, system prompt, and
+  token limit
+- Switch active profile via web UI or calculator command
+- Lets one device serve different use cases (work, personal, kid-friendly) or
+  multiple users with their own API keys
 
-# Editing this README
+**Self-contained**
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+- No external server or companion app required
+- All configuration lives in ESP32 flash storage and persists across reboots
+- Internal power via LiPo cell, charged through the XIAO's USB-C port
 
-## Suggestions for a good README
+## Build and flash
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+This is a [PlatformIO](https://platformio.org/) project.
 
-## Name
-Choose a self-explaining name for your project.
+```bash
+# Install PlatformIO CLI if you don't have it
+pip install --user platformio
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+# From the project root
+pio run --target upload     # build and flash to connected XIAO ESP32-S3
+pio device monitor          # open serial monitor at 115200 baud
+```
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+Connect the XIAO via USB-C. On Linux, your user needs to be in the `dialout`
+group to access serial devices:
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+```bash
+sudo usermod -a -G dialout $USER
+# Then log out and back in
+```
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+## First-time setup
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+After flashing the firmware to a new XIAO:
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+1. Power on the device (USB-C cable to phone charger, laptop, or LiPo when
+   the build is assembled)
+2. On a phone or laptop, open WiFi settings
+3. Connect to the open network named `TI84-Claude-Setup`
+4. A "Sign in to network" popup should appear (this is the captive portal).
+   If it doesn't, open a browser and navigate to `http://192.168.4.1`
+5. Add your home WiFi network and an Anthropic API key
+6. Tap Save. The device reboots and connects to your home WiFi.
+7. From any device on your home network, visit `http://ti84claude.local` to
+   reconfigure later
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+Get an Anthropic API key at
+[console.anthropic.com](https://console.anthropic.com). The default profile
+uses Claude Haiku 4.5, which costs roughly $0.0004 per typical short exchange.
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+## Project layout
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+```
+ti84-claude/
+├── platformio.ini              # build configuration
+├── README.md                   # this file
+├── .gitignore                  # excludes build artifacts and secrets
+├── docs/                       # parts lists, wiring diagrams, design notes
+└── src/                        # all source code
+    ├── main.cpp                # boot sequence and main loop
+    ├── storage.{h,cpp}         # NVS-backed configuration storage
+    ├── profile.{h,cpp}         # Claude profile data structure
+    ├── wifi_network.h          # WiFi network data structure
+    ├── wifi_manager.{h,cpp}    # WiFi connection management (AP and STA)
+    ├── captive_portal.{h,cpp}  # web UI with DNS hijack
+    ├── claude_api.{h,cpp}      # Anthropic Messages API client
+    └── serial_console.{h,cpp}  # development REPL over USB serial
+```
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+## Configuration
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+All configuration is stored in the ESP32's NVS (non-volatile storage). Three
+ways to manage it:
+
+**Web UI** (recommended for end users): `http://ti84claude.local` or
+`http://192.168.4.1` in AP mode.
+
+**Serial console** (for development): Open `pio device monitor` and type
+`HELP` for the command list. Examples:
+
+```
+LIST                       Show all networks and profiles
+NET ADD HomeWiFi password  Add a WiFi network
+PROFILE ADD work           Create a new profile
+PROFILE USE 1              Switch active profile
+ASK <prompt>               Send a prompt to Claude (after connecting)
+STATUS                     Show WiFi and system info
+```
+
+**Direct editing**: Not supported. Storage is in NVS, not on a filesystem,
+so changes go through the firmware.
+
+## Security considerations
+
+This is a hobby project, not a hardened device. A few honest disclosures:
+
+- The captive portal in AP mode runs over HTTP, not HTTPS. Anyone in WiFi
+  range during initial setup could intercept the API key. Setup is brief and
+  local, so the risk is limited, but be aware of it.
+- The API key is stored in NVS unencrypted. Anyone with physical access to
+  the device and the right tools could read it from flash. This is a known
+  trade-off for ease of development.
+- The Claude API call uses `setInsecure()` to skip TLS certificate validation.
+  In practice this still encrypts traffic, but it doesn't verify you're really
+  talking to Anthropic. A MITM with a fake certificate could intercept your
+  API key. For a home network, this is generally acceptable.
+
+For a production device, all three of these would need to be addressed.
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+Not yet decided. Treat as "all rights reserved" for now.
+
+## Acknowledgments
+
+Built by Ben, with substantial pair-programming and architectural help from
+Claude (Anthropic). The recursive aspect of using an LLM to build a calculator
+front-end for that same LLM is acknowledged and embraced.
