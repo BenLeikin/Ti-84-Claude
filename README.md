@@ -17,10 +17,10 @@ Work in progress.
 | ESP32 firmware: WiFi, captive portal, API client | Working |
 | Multi-network and multi-profile support | Working |
 | Web configuration UI | Working |
-| Power: LiPo + USB-C charging | Designed, parts ordered |
-| Internal mounting inside TI-84 case | Designed |
-| Link port protocol (ESP32 side) | Next up |
-| Calculator-side program | Pending |
+| Power: LiPo + USB-C charging | Working |
+| Internal mounting inside TI-84 case | Working |
+| Link port protocol (ESP32 side) | Working |
+| Calculator-side program | In Progress |
 
 ## Hardware
 
